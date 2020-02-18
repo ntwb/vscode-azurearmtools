@@ -22,6 +22,7 @@ import * as Json from "./JSON";
 import * as language from "./Language";
 import { reloadSchemas } from "./languageclient/reloadSchemas";
 import { startArmLanguageServer, stopArmLanguageServer } from "./languageclient/startArmLanguageServer";
+import { findMatchingParamsFile, ParamsFilesCodeLensProvider, selectParametersFile } from "./ParamsFilesCodeLensProvider";
 import { IReferenceSite, PositionContext } from "./PositionContext";
 import { ReferenceList } from "./ReferenceList";
 import { getPreferredSchema } from "./schemas";
@@ -61,6 +62,7 @@ export class AzureRMTools {
     private readonly _diagnosticsCollection: vscode.DiagnosticCollection;
     private readonly _deploymentTemplates: Map<string, DeploymentTemplate> = new Map<string, DeploymentTemplate>();
     private readonly _filesAskedToUpdateSchema: Set<string> = new Set<string>();
+    private readonly _statusBarItem: vscode.StatusBarItem;
     private _areDeploymentTemplateEventsHookedUp: boolean = false;
     private _diagnosticsVersion: number = 0;
 
@@ -92,7 +94,12 @@ export class AzureRMTools {
         registerCommand("azurerm-vscode-tools.reloadSchemas", async () => {
             await reloadSchemas();
         });
+        registerCommand("azurerm-vscode-tools.selectParametersFile", selectParametersFile);
 
+        this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right); //%, 1000);
+        ext.context.subscriptions.push(this._statusBarItem);
+
+        //asdf push to subsscriptions
         vscode.window.onDidChangeActiveTextEditor(this.onActiveTextEditorChanged, this, context.subscriptions);
         vscode.workspace.onDidOpenTextDocument(this.onDocumentOpened, this, context.subscriptions);
         vscode.workspace.onDidChangeTextDocument(this.onDocumentChanged, this, context.subscriptions);
@@ -187,6 +194,8 @@ export class AzureRMTools {
                         }
                     }
 
+                    this.updateStatusBarItem(document, deploymentTemplate);
+
                     this.reportDeploymentTemplateErrors(document, deploymentTemplate);
                     survey.registerActiveUse();
                 }
@@ -202,6 +211,7 @@ export class AzureRMTools {
                 // deployment template schema). In either case, we should
                 // remove the deployment template from our cache.
                 this.closeDeploymentTemplate(document);
+                this._statusBarItem.hide();
             }
         });
     }
@@ -448,8 +458,18 @@ export class AzureRMTools {
         };
         ext.context.subscriptions.push(vscode.languages.registerRenameProvider(armDeploymentDocumentSelector, renameProvider));
 
+        ext.context.subscriptions.push(vscode.languages.registerCodeLensProvider(armDeploymentDocumentSelector, new ParamsFilesCodeLensProvider()));
+
         // tslint:disable-next-line:no-floating-promises // Don't wait
         startArmLanguageServer();
+    }
+
+    private updateStatusBarItem(document: vscode.TextDocument, deploymentTemplate: DeploymentTemplate): void {
+        const paramsFile = findMatchingParamsFile(document.uri);
+        //this._statusBarItem.color = new vscode.ThemeColor('inputValidation.errorBackground');
+        this._statusBarItem.text = !!paramsFile ? `Params: ${path.basename(paramsFile.fsPath)}` : "Select Params File";
+        this._statusBarItem.command = "azurerm-vscode-tools.selectParametersFile";
+        this._statusBarItem.show();
     }
 
     /**
@@ -758,9 +778,14 @@ export class AzureRMTools {
 
             if (editor) {
                 const document = editor.document;
-                if (!this.getDeploymentTemplate(document)) {
+                const deploymentTemplate = this.getDeploymentTemplate(document);
+                if (!deploymentTemplate) {
                     this.updateDeploymentTemplate(document);
+                } else {
+                    this.updateStatusBarItem(document, deploymentTemplate);
                 }
+            } else {
+                this._statusBarItem.hide();
             }
         });
     }

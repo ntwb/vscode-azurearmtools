@@ -34,6 +34,7 @@ export namespace configKeys {
     export const waitForDebugger = 'languageServer.waitForDebugger';
     export const langServerPath = 'languageServer.path';
     export const checkForLatestSchema = 'checkForLatestSchema';
+    export const parametersFiles = 'parametersFiles';
 }
 
 export namespace globalStateKeys {
