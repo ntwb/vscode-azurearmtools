@@ -4,11 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as fse from 'fs-extra';
+import { Settings } from 'http2';
 import * as os from 'os';
 import * as path from 'path';
-import { ProgressLocation, window, workspace } from 'vscode';
+import { Hover, MarkdownString, Position, ProgressLocation, TextDocument, window, workspace, WorkspaceFolder } from 'vscode';
 import { callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, IActionContext, parseError } from 'vscode-azureextensionui';
-import { LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
+import { CancellationToken, ConfigurationParams, ConfigurationRequest, LanguageClient, LanguageClientOptions, ProvideHoverSignature, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
 import { dotnetAcquire, ensureDotnetDependencies } from '../acquisition/dotnetAcquisition';
 import { configKeys, configPrefix, dotnetVersion, languageFriendlyName, languageId, languageServerFolderName, languageServerName } from '../constants';
 import { ext } from '../extensionVariables';
@@ -73,7 +74,9 @@ async function getLangServerVersion(): Promise<string | undefined> {
     });
 }
 
+// tslint:disable-next-line: max-func-body-length asdf
 export async function startLanguageClient(serverDllPath: string, dotnetExePath: string): Promise<void> {
+    // tslint:disable-next-line: max-func-body-length asdf
     await callWithTelemetryAndErrorHandling('startArmLanguageClient', async (actionContext: IActionContext) => {
         actionContext.errorHandling.rethrow = true;
 
@@ -118,6 +121,43 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             revealOutputChannelOn: RevealOutputChannelOn.Error,
             synchronize: {
                 configurationSection: configPrefix
+            },
+            outputChannel: ext.outputChannel,
+            middleware: {
+                provideHover: async (document: TextDocument, position: Position, token: CancellationToken, next: ProvideHoverSignature): Promise<Hover | undefined | null> => {
+                    document = document;
+                    position = position;
+                    token = token;
+                    next = next;
+                    let a = await next(document, position, token);
+                    if (a) {
+                        a.contents.push(new MarkdownString("hi there "));
+                        return a;
+                    }
+                },
+                workspace: {
+                    configuration: (params: ConfigurationParams, token: CancellationToken, next: ConfigurationRequest.HandlerSignature): unknown[] => {
+                        let result: unknown[] = <unknown[]>next(params, token);
+                        let settings: Settings = <Settings>(<unknown[]>result)[0];
+                        let scopeUri = "";
+
+                        for (let item of params.items) {
+                            if (!item.scopeUri) {
+                                continue;
+                            } else {
+                                scopeUri = item.scopeUri;
+                            }
+                        }
+
+                        let resource = client.protocol2CodeConverter.asUri(scopeUri);
+                        let workspaceFolder: WorkspaceFolder | undefined = workspace.getWorkspaceFolder(resource);
+                        if (workspaceFolder) {
+                            convertToAbsolutePaths(settings, workspaceFolder);
+                        }
+
+                        return result;
+                    }
+                }
             }
         };
 
@@ -260,4 +300,41 @@ async function ensureDependencies(dotnetExePath: string, serverDllPath: string):
 
 async function isFile(pathPath: string): Promise<boolean> {
     return (await fse.pathExists(pathPath)) && (await fse.stat(pathPath)).isFile();
+}
+
+function convertToAbsolutePaths(settings: Settings, folder: WorkspaceFolder): void {
+    settings = settings;
+    folder = folder;
+    // let configFile = settings.configFile;
+    // if (configFile) {
+    //     settings.configFile = convertAbsolute(configFile, folder);
+    // }
+
+    // let nodePath = settings.nodePath;
+    // if (nodePath) {
+    //     settings.nodePath = convertAbsolute(nodePath, folder);
+    // }
+
+    // if (settings.rulesDirectory) {
+    //     if (Array.isArray(settings.rulesDirectory)) {
+    //         for (let i = 0; i < settings.rulesDirectory.length; i++) {
+    //             settings.rulesDirectory[i] = convertAbsolute(settings.rulesDirectory[i], folder);
+    //         }
+    //     } else {
+    //         settings.rulesDirectory = convertAbsolute(settings.rulesDirectory, folder);
+    //     }
+    // }
+}
+
+function convertAbsolute(file: string, folder: WorkspaceFolder): string {
+    if (path.isAbsolute(file)) {
+        return file;
+    }
+
+    let folderPath: string = folder.uri.fsPath;
+    if (!folderPath) {
+        return file;
+    }
+
+    return path.join(folderPath, file);
 }
