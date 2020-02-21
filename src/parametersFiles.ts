@@ -2,59 +2,83 @@
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 // ----------------------------------------------------------------------------
 
+import * as assert from 'assert';
 import * as fse from 'fs-extra';
 import * as path from 'path';
-import { Uri, window, workspace } from 'vscode';
-import { IActionContext, IAzureQuickPickItem } from 'vscode-azureextensionui';
-import { configKeys, configPrefix } from './constants';
+import { commands, MessageItem, TextDocument, Uri, window, workspace } from 'vscode';
+import { callWithTelemetryAndErrorHandling, IActionContext, IAzureQuickPickItem } from 'vscode-azureextensionui';
+import { configKeys, configPrefix, globalStateKeys } from './constants';
+import { DeploymentTemplate } from './DeploymentTemplate';
 import { ext } from './extensionVariables';
-import { containsParamsSchema, isParamsSchema } from './schemas';
+import { containsParamsSchema } from './schemas';
 
 const readAtMostBytesToFindParamsSchema = 50 * 1024;
 
-export async function selectParametersFile(actionContext: IActionContext, sourceUri?: Uri): Promise<void> {
-  const templatePath = window.activeTextEditor?.document.uri;
-  if (templatePath && templatePath.fsPath) {
-    const currentParamsFile = normalizePath(findMappedParamsFileForTemplate(templatePath)?.fsPath);
+const _filesCheckedThisSession: Set<string> = new Set<string>();
 
-    const possibilities: string[] = await findAvailableParametersFiles(templatePath.fsPath);
-    const none: IAzureQuickPickItem<string> = {
+interface IPossibleParamsFile {
+  path: string;
+  isCloseNameMatch: boolean;
+}
+
+function hasSupportedParamsFileExtension(filePath: string): boolean {
+  const extension = path.extname(filePath).toLowerCase();
+  return extension === '.json' || extension === '.jsonc';
+}
+
+export async function selectParametersFile(actionContext: IActionContext, sourceUri?: Uri): Promise<void> {
+  const templateUri = window.activeTextEditor?.document.uri;
+  if (templateUri && templateUri.fsPath) {
+    const currentParamsFileNormalized = normalizePath(findMappedParamsFileForTemplate(templateUri)?.fsPath);
+
+    const possibilities: IPossibleParamsFile[] = await findAvailableParametersFiles(templateUri);
+    const none: IAzureQuickPickItem<IPossibleParamsFile | undefined> = {
       label: "None",
-      data: ""
+      data: undefined
     };
     // asdf browse
     // find most likely matches
-    const items: IAzureQuickPickItem<string>[] = possibilities.map(p => <IAzureQuickPickItem<string>>{
-      label: path.basename(p),
-      data: p,
-      description: normalizePath(p) === currentParamsFile ? "(Current)" : undefined
+    const items: IAzureQuickPickItem<IPossibleParamsFile>[] = possibilities.map(paramFile => <IAzureQuickPickItem<IPossibleParamsFile>>{
+      label: path.basename(paramFile.path),
+      data: paramFile,
+      description: normalizePath(paramFile.path) === currentParamsFileNormalized ?
+        "(Current)" :
+        paramFile.isCloseNameMatch ? "(Similar filename)" : undefined
     });
 
     items.sort((a, b) => {
+      // The current selected params file goes first
+      if (normalizePath(a.data.path) === currentParamsFileNormalized) {
+        return -1;
+      } else if (normalizePath(b.data.path) === currentParamsFileNormalized) {
+        return 1;
+      }
+
+      // "(None)" goes second
       if (a === none) {
         return -1;
       } else if (b === none) {
         return 1;
       }
 
-      if (normalizePath(a.data) === currentParamsFile) {
-        return -1;
-      } else if (normalizePath(b.data) === currentParamsFile) {
-        return 1;
+      // Close name matches go next
+      if (a.data.isCloseNameMatch !== b.data.isCloseNameMatch) {
+        return a.data.isCloseNameMatch ? -1 : 1;
       }
 
-      return a.data.localeCompare(b.data);
+      return a.data.path.localeCompare(b.data.path);
     });
 
-    const result: IAzureQuickPickItem<string> = await ext.ui.showQuickPick(
+    const result: IAzureQuickPickItem<IPossibleParamsFile | undefined> = await ext.ui.showQuickPick(
       [none].concat(items),
       {
         canPickMany: false,
-        placeHolder: "Select an Azure deployment parameters file to validate against"
+        placeHolder: `Select a parameters file to enable fuller validation against template file ${templateUri.fsPath}`,
+        suppressPersistence: true
       });
 
     // tslint:disable-next-line: no-non-null-assertion
-    await ext.ui.showWarningMessage(result.data);
+    await ext.ui.showWarningMessage(String(result.data));
   }
 }
 
@@ -89,20 +113,23 @@ function normalizePath(fsPath: string | undefined): string | undefined {
   return undefined;
 }
 
-export async function findAvailableParametersFiles(templatePath: string): Promise<string[]> {
-  let paths: string[] = [];
+export async function findAvailableParametersFiles(templateUri: Uri): Promise<IPossibleParamsFile[]> {
+  let paths: IPossibleParamsFile[] = [];
 
   try {
-    const folder = path.dirname(templatePath);
+    const folder = path.dirname(templateUri.fsPath);
     const fileNames: string[] = await fse.readdir(folder);
     for (let paramsFileName of fileNames) {
       const fullPath = path.join(folder, paramsFileName);
       if (await isParametersFile(fullPath)) {
-        paths.push(fullPath);
+        paths.push({
+          path: fullPath,
+          isCloseNameMatch: isLikelyMatchingParamsFileBasedOnName(templateUri.fsPath, fullPath)
+        });
       }
     }
   } catch (error) {
-    console.log(error);
+    // Ignore
   }
 
   return paths;
@@ -110,22 +137,15 @@ export async function findAvailableParametersFiles(templatePath: string): Promis
 
 async function isParametersFile(filePath: string): Promise<boolean> {
   try {
-    if (path.extname(filePath).toLowerCase() !== '.json') {
+    if (!hasSupportedParamsFileExtension(filePath)) {
       return false;
     }
 
     if (await doesFileContainString(filePath, containsParamsSchema, readAtMostBytesToFindParamsSchema)) {
-      // It contains the correct schema string, but could be in a comment etc. Now do more accurate check
-      let contents: unknown = await fse.readJson(filePath, { encoding: 'utf8' });
-      if (contents instanceof Object) {
-        let schema = (<{ $schema?: string }>contents).$schema;
-        if (isParamsSchema(schema)) {
-          return true;
-        }
-      }
+      return true;
     }
   } catch (error) {
-    console.log(error); //asdf
+    // Ignore
   }
 
   return false;
@@ -150,5 +170,111 @@ async function doesFileContainString(filePath: string, matches: (fileSubcontents
     stream.on('error', (err) => {
       reject(err);
     });
+  });
+}
+
+/**
+ * Determines if a file is likely a parameters file for the given template file, based on name.
+ * Common patterns are:
+ *   template.json, template.params.json
+ *   template.json, template.parameters.json
+ */
+export function isLikelyMatchingParamsFileBasedOnName(templateFileName: string, paramsFileName: string): boolean {
+  if (!hasSupportedParamsFileExtension(paramsFileName)) {
+    return false;
+  }
+
+  const baseTemplateName = removeAllExtensions(path.basename(templateFileName)).toLowerCase();
+  const baseParamsName = removeAllExtensions(path.basename(paramsFileName)).toLowerCase();
+
+  return baseParamsName.startsWith(baseTemplateName);
+}
+
+function removeAllExtensions(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, '');
+}
+
+export function queryAddParametersFile(document: TextDocument, deploymentTemplate: DeploymentTemplate): void {
+  // Only deal with saved files, because we don't have an accurate
+  //   URI that we can track for unsaved files, and it's a better user experience.
+  if (document.uri.scheme !== 'file') {
+    return;
+  }
+
+  // Already checked for this scenario?
+  const templatPath = document.uri.fsPath;
+  let queriedToAddParamsFile = _filesCheckedThisSession.has(templatPath);
+  if (queriedToAddParamsFile) {
+    return;
+  }
+  _filesCheckedThisSession.add(templatPath.toLowerCase());
+
+  const alreadyHasParamsFile: boolean = !!findMappedParamsFileForTemplate(document.uri);
+  const checkForMatchingParamsFileSetting: boolean = !!workspace.getConfiguration(configPrefix).get<boolean>(configKeys.checkForMatchingParamsFiles);
+
+  // tslint:disable-next-line: no-floating-promises Don't wait
+  callWithTelemetryAndErrorHandling('queryAddParametersFile', async (actionContext: IActionContext): Promise<void> => {
+    actionContext.telemetry.properties.checkForMatchingParamsFile = String(checkForMatchingParamsFileSetting);
+    actionContext.telemetry.properties.alreadyHasParamsFile = String(alreadyHasParamsFile);
+
+    if (!checkForMatchingParamsFileSetting || alreadyHasParamsFile) {
+      return;
+    }
+
+    // tslint:disable-next-line: strict-boolean-expressions
+    const dontAskFiles = ext.context.globalState.get<string[]>(globalStateKeys.dontAskAboutParamsFiles) || []; //asdf?
+    if (dontAskFiles.includes(templatPath)) {
+      actionContext.telemetry.properties.isInDontAskList = 'true';
+      return;
+    }
+
+    const possibleParamsFiles = await findAvailableParametersFiles(document.uri);
+    const closeMatches = possibleParamsFiles.filter(pf => pf.isCloseNameMatch);
+    actionContext.telemetry.measurements.closeMatches = closeMatches.length;
+    // Take the shortest as the most likely best match
+    const closestMatch = closeMatches.length > 0 ? closeMatches.sort(pf => -pf.path.length)[0].path : undefined;
+    if (!closestMatch) {
+      // asdf
+      return;
+    }
+
+    const yes: MessageItem = { title: "Yes" };
+    const no: MessageItem = { title: "No" }; // asdf blacklist?
+    const another: MessageItem = { title: "Choose another" };
+    //asdfconst neverForThisFile: vscode.MessageItem = { title: "Never for this template" };
+
+    const response = await ext.ui.showWarningMessage(
+      `Is "${path.basename(closestMatch)}" the correct parameters file to use for "${path.basename(templatPath)}"?`,
+      {
+        learnMoreLink: "https://aka.ms/vscode-azurearmtools-updateschema"
+      },
+      yes,
+      no,
+      another
+    );
+    actionContext.telemetry.properties.response = response.title;
+
+    switch (response.title) {
+      case yes.title:
+        await ext.ui.showWarningMessage("yes asdf");
+        break;
+      case no.title:
+        // We won't ask again. Let them know how to do it manually
+        // Don't wait for theanswer
+        window.showInformationMessage(
+          `blah blah here's how to do it asdf`
+          // {
+          //     //learnMoreLink: "asdf"
+          // }
+        );
+        break;
+      case another.title:
+        await commands.executeCommand("azurerm-vscode-tools.selectParametersFile"); //asdf
+        // asdf what if they cancel?  Do we tell them how?  ask again?
+        break;
+      default:
+        assert("queryAddParametersFile: Unexpected response");
+        break;
+    }
   });
 }

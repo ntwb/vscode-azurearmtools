@@ -22,7 +22,7 @@ import * as Json from "./JSON";
 import * as language from "./Language";
 import { reloadSchemas } from "./languageclient/reloadSchemas";
 import { startArmLanguageServer, stopArmLanguageServer } from "./languageclient/startArmLanguageServer";
-import { findMappedParamsFileForTemplate, selectParametersFile } from "./parametersFiles";
+import { findMappedParamsFileForTemplate, queryAddParametersFile, selectParametersFile } from "./parametersFiles";
 import { IReferenceSite, PositionContext } from "./PositionContext";
 import { ReferenceList } from "./ReferenceList";
 import { getPreferredSchema } from "./schemas";
@@ -140,7 +140,7 @@ export class AzureRMTools {
 
             let treatAsDeploymentTemplate = false;
             let isNewlyOpened = false; // As opposed to already opened and simply being made active
-            const documentUri: string = document.uri.toString();
+            const documentPath: string = document.uri.toString();
 
             if (document.languageId === languageId) {
                 // Lang ID is set to arm-template, whether auto or manual, respect the setting
@@ -152,12 +152,12 @@ export class AzureRMTools {
                 // If the documentUri is not in our dictionary of deployment templates, then we
                 // know that this document was just opened (as opposed to changed/updated).
                 // Note that it might have been opened, then closed, then reopened.
-                if (!this._deploymentTemplates.has(documentUri)) {
+                if (!this._deploymentTemplates.has(documentPath)) {
                     isNewlyOpened = true;
                 }
 
                 // Do a full parse
-                let deploymentTemplate: DeploymentTemplate = new DeploymentTemplate(document.getText(), documentUri);
+                let deploymentTemplate: DeploymentTemplate = new DeploymentTemplate(document.getText(), documentPath);
                 if (deploymentTemplate.hasArmSchemaUri()) {
                     treatAsDeploymentTemplate = true;
                 }
@@ -165,7 +165,7 @@ export class AzureRMTools {
 
                 if (treatAsDeploymentTemplate) {
                     this.ensureDeploymentTemplateEventsHookedUp();
-                    this._deploymentTemplates.set(documentUri, deploymentTemplate);
+                    this._deploymentTemplates.set(documentPath, deploymentTemplate);
 
                     if (isNewlyOpened) {
                         // A deployment template has been opened (as opposed to having been tabbed to)
@@ -183,15 +183,11 @@ export class AzureRMTools {
 
                         // No guarantee that active editor is the one we're processing, ignore if not
                         if (editor && editor.document === document) {
-                            // Only query to update schema for saved files, because we don't have an accurate
-                            //   URI that we can track yet.
-                            if (document.uri.scheme === 'file') {
-                                let queriedToUpdateSchema = this._filesAskedToUpdateSchema.has(documentUri);
-                                if (!queriedToUpdateSchema) { // Only ask to upgrade once per session per file
-                                    // Are they using an older schema?  Ask to update.
-                                    this.queryUseNewerSchema(editor, deploymentTemplate);
-                                }
-                            }
+                            // Are they using an older schema?  Ask to update.
+                            this.queryUseNewerSchema(editor, deploymentTemplate);
+
+                            // Is there a possibly-matching params file they might want to associate?
+                            queryAddParametersFile(document, deploymentTemplate);
                         }
                     }
 
@@ -304,12 +300,26 @@ export class AzureRMTools {
     }
 
     private queryUseNewerSchema(editor: vscode.TextEditor, deploymentTemplate: DeploymentTemplate): void {
+        // Only deal with saved files, because we don't have an accurate
+        //   URI that we can track for unsaved files, and it's a better user experience.
+        if (editor.document.uri.scheme !== 'file') {
+            return;
+        }
+
+        // Only ask to upgrade once per session per file
+        const document = editor.document;
+        const documentPath = document.uri.fsPath;
+        let queriedToUpdateSchema = this._filesAskedToUpdateSchema.has(documentPath);
+        if (queriedToUpdateSchema) {
+            return;
+        }
+
+        this._filesAskedToUpdateSchema.add(documentPath);
+
         const schemaValue: Json.StringValue | undefined = deploymentTemplate.schemaValue;
         // tslint:disable-next-line: strict-boolean-expressions
         const schemaUri: string | undefined = deploymentTemplate.schemaUri || undefined;
         const preferredSchemaUri: string | undefined = schemaUri && getPreferredSchema(schemaUri);
-        const document = editor.document;
-        const documentUri = document.uri.toString();
         const checkForLatestSchema = !!vscode.workspace.getConfiguration(configPrefix).get<boolean>(configKeys.checkForLatestSchema);
 
         if (preferredSchemaUri && schemaValue) {
@@ -325,7 +335,7 @@ export class AzureRMTools {
 
                 // tslint:disable-next-line: strict-boolean-expressions
                 const dontAskFiles = ext.context.globalState.get<string[]>(globalStateKeys.dontAskAboutSchemaFiles) || [];
-                if (dontAskFiles.includes(documentUri)) {
+                if (dontAskFiles.includes(documentPath)) {
                     actionContext.telemetry.properties.isInDontAskList = 'true';
                     return;
                 }
@@ -334,7 +344,6 @@ export class AzureRMTools {
                 const notNow: vscode.MessageItem = { title: "Not now" };
                 const neverForThisFile: vscode.MessageItem = { title: "Never for this file" };
 
-                this._filesAskedToUpdateSchema.add(documentUri);
                 const response = await ext.ui.showWarningMessage(
                     `Would you like to use the latest schema for deployment template "${path.basename(document.uri.path)}" (note: some tools may be unable to process the latest schema)?`,
                     {
@@ -354,7 +363,7 @@ export class AzureRMTools {
                     case notNow.title:
                         return;
                     case neverForThisFile.title:
-                        dontAskFiles.push(documentUri);
+                        dontAskFiles.push(documentPath);
                         await ext.context.globalState.update(globalStateKeys.dontAskAboutSchemaFiles, dontAskFiles);
                         break;
                     default:
@@ -469,8 +478,10 @@ export class AzureRMTools {
         if (activeDocument) {
             const deploymentTemplate = this.getDeploymentTemplate(activeDocument);
             if (deploymentTemplate) {
-                const paramsFile = findMappedParamsFileForTemplate(activeDocument.uri); // asdf can this throw e.g. invalid path?
-                this._statusBarItem.text = !!paramsFile ? `Parameters: ${path.basename(paramsFile.fsPath)}` : "Select Parameters File";
+                // asdf consider storing paramsFile with deploymenttemplate
+                // asdf update when settings change
+                const paramsFileUri = findMappedParamsFileForTemplate(activeDocument.uri); // asdf can this throw e.g. invalid path?
+                this._statusBarItem.text = !!paramsFileUri ? `Parameters: ${path.basename(paramsFileUri.fsPath)}` : "Select Parameters File";
                 this._statusBarItem.command = "azurerm-vscode-tools.selectParametersFile";
                 this._statusBarItem.show();
                 return;

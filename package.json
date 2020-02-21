@@ -48,7 +48,8 @@
         "onCommand:azurerm-vscode-tools.selectParametersFile"
     ],
     "contributes": {
-        "grammars": [{
+        "grammars": [
+            {
                 "language": "arm-template",
                 "scopeName": "source.json.arm-template",
                 "path": "dist/grammars/JSONC.arm.tmLanguage.json"
@@ -58,7 +59,8 @@
                 "path": "dist/grammars/arm-expression-string.tmLanguage.json"
             }
         ],
-        "snippets": [{
+        "snippets": [
+            {
                 "language": "arm-template",
                 "path": "./assets/armsnippets.jsonc"
             },
@@ -112,6 +114,11 @@
                     "description": "Check if the schema for deployment templates is using an out-of-date version and suggest updating",
                     "default": true
                 },
+                "azureResourceManagerTools.checkForMatchingParamsFiles": {
+                    "type": "boolean",
+                    "description": "Check if an opened template file has a matching params file and ask to use it",
+                    "default": true
+                },
                 "azureResourceManagerTools.paramsFiles": {
                     "type": "object",
                     "description": "asdf todo",
@@ -123,20 +130,25 @@
             }
         },
         "views": {
-            "explorer": [{
-                "id": "azurerm-vscode-tools.template-outline",
-                "name": "ARM Template Outline",
-                "when": "showAzureTemplateView"
-            }]
+            "explorer": [
+                {
+                    "id": "azurerm-vscode-tools.template-outline",
+                    "name": "ARM Template Outline",
+                    "when": "showAzureTemplateView"
+                }
+            ]
         },
-        "languages": [{
-            "id": "arm-template",
-            "aliases": [
-                "Azure Resource Manager Template"
-            ],
-            "configuration": "dist/grammars/jsonc.arm.language-configuration.json"
-        }],
-        "commands": [{
+        "languages": [
+            {
+                "id": "arm-template",
+                "aliases": [
+                    "Azure Resource Manager Template"
+                ],
+                "configuration": "dist/grammars/jsonc.arm.language-configuration.json"
+            }
+        ],
+        "commands": [
+            {
                 "category": "Azure Resource Manager Tools",
                 "title": "Remove Local Dotnet Core Installation",
                 "command": "azurerm-vscode-tools.uninstallDotnet"
@@ -154,18 +166,24 @@
             }
         ],
         "menus": {
-            "editor/context": [{
-                "command": "azurerm-vscode-tools.reloadSchemas",
-                "when": "editorLangId==arm-template"
-            }],
-            "editor/title": [{
-                "command": "azurerm-vscode-tools.selectParametersFile",
-                "group": "hello"
-            }],
-            "editor/title/context": [{
-                "command": "azurerm-vscode-tools.selectParametersFile",
-                "group": "hello"
-            }]
+            "editor/context": [
+                {
+                    "command": "azurerm-vscode-tools.reloadSchemas",
+                    "when": "editorLangId==arm-template"
+                }
+            ],
+            "editor/title": [
+                {
+                    "command": "azurerm-vscode-tools.selectParametersFile",
+                    "group": "hello"
+                }
+            ],
+            "editor/title/context": [
+                {
+                    "command": "azurerm-vscode-tools.selectParametersFile",
+                    "group": "hello"
+                }
+            ]
         }
     },
     "main": "main",
