@@ -122,7 +122,6 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
             synchronize: {
                 configurationSection: configPrefix
             },
-            outputChannel: ext.outputChannel,
             middleware: {
                 provideHover: async (document: TextDocument, position: Position, token: CancellationToken, next: ProvideHoverSignature): Promise<Hover | undefined | null> => {
                     document = document;

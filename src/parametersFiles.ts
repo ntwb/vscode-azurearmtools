@@ -7,7 +7,7 @@ import * as fse from 'fs-extra';
 import * as path from 'path';
 import { commands, MessageItem, TextDocument, Uri, window, workspace } from 'vscode';
 import { callWithTelemetryAndErrorHandling, IActionContext, IAzureQuickPickItem } from 'vscode-azureextensionui';
-import { configKeys, configPrefix, globalStateKeys } from './constants';
+import { configKeys, configPrefix, globalStateKeys, isWin32 } from './constants';
 import { DeploymentTemplate } from './DeploymentTemplate';
 import { ext } from './extensionVariables';
 import { containsParamsSchema } from './schemas';
@@ -32,25 +32,31 @@ export async function selectParametersFile(actionContext: IActionContext, source
     const currentParamsFileNormalized = normalizePath(findMappedParamsFileForTemplate(templateUri)?.fsPath);
 
     const possibilities: IPossibleParamsFile[] = await findAvailableParametersFiles(templateUri);
+    const current = possibilities.find(pf => normalizePath(pf.path) === currentParamsFileNormalized);
     const none: IAzureQuickPickItem<IPossibleParamsFile | undefined> = {
-      label: "None",
+      label: "$(circle-slash) None",  //asdf $(remove)?
       data: undefined
     };
-    // asdf browse
+    // asdf browse  $(search)
+    // asdf new?
     // find most likely matches
-    const items: IAzureQuickPickItem<IPossibleParamsFile>[] = possibilities.map(paramFile => <IAzureQuickPickItem<IPossibleParamsFile>>{
-      label: path.basename(paramFile.path),
+    let items: IAzureQuickPickItem<IPossibleParamsFile>[] = possibilities.map(paramFile => <IAzureQuickPickItem<IPossibleParamsFile>>{
+      label: `${paramFile === current ? "$(check)" : "$(json)"} ${path.basename(paramFile.path)}`,  // asdf $(star-full)?
       data: paramFile,
-      description: normalizePath(paramFile.path) === currentParamsFileNormalized ?
-        "(Current)" :
+      description: paramFile === current ? "(Current)" :
         paramFile.isCloseNameMatch ? "(Similar filename)" : undefined
     });
 
-    items.sort((a, b) => {
+    let allItems = [none].concat(items);
+
+    allItems.sort((a, b) => {
+      const aData = a?.data;
+      const bData = a?.data;
+
       // The current selected params file goes first
-      if (normalizePath(a.data.path) === currentParamsFileNormalized) {
+      if (aData === current) {
         return -1;
-      } else if (normalizePath(b.data.path) === currentParamsFileNormalized) {
+      } else if (bData === current) {
         return 1;
       }
 
@@ -62,15 +68,16 @@ export async function selectParametersFile(actionContext: IActionContext, source
       }
 
       // Close name matches go next
-      if (a.data.isCloseNameMatch !== b.data.isCloseNameMatch) {
-        return a.data.isCloseNameMatch ? -1 : 1;
+      if (a?.data?.isCloseNameMatch !== b?.data?.isCloseNameMatch) {
+        return a?.data?.isCloseNameMatch ? -1 : 1;
       }
 
-      return a.data.path.localeCompare(b.data.path);
+      // tslint:disable-next-line: strict-boolean-expressions
+      return (aData?.path || "").localeCompare(bData?.path || "");
     });
 
     const result: IAzureQuickPickItem<IPossibleParamsFile | undefined> = await ext.ui.showQuickPick(
-      [none].concat(items),
+      allItems,
       {
         canPickMany: false,
         placeHolder: `Select a parameters file to enable fuller validation against template file ${templateUri.fsPath}`,
@@ -94,11 +101,15 @@ export function findMappedParamsFileForTemplate(templateFileUri: Uri): Uri | und
       const normalizedFileName: string | undefined = normalizePath(fileNameKey);
       if (normalizedFileName === normalizedTemplatePath) {
         let paramsFile = paramsFiles[fileNameKey];
-        return typeof paramsFile === 'string' ? Uri.file(paramsFiles[fileNameKey]) : undefined; // asdf what if invalid uri?
+        if (typeof paramsFile === 'string') {
+          // Resolve relative to template file's folder
+          let resolvedPath = path.resolve(path.dirname(templateFileUri.fsPath), paramsFile);
+          let normalizedPath = normalizePath(resolvedPath);
+          return !!normalizedPath ? Uri.file(normalizedPath) : undefined; // asdf what if invalid uri?
+        }
       }
     }
-    // asdf normalize
-    // asdf relative paths
+
     // asdf urls?
   }
 
@@ -107,7 +118,12 @@ export function findMappedParamsFileForTemplate(templateFileUri: Uri): Uri | und
 
 function normalizePath(fsPath: string | undefined): string | undefined {
   if (typeof fsPath === 'string') {
-    return path.normalize(fsPath).toLowerCase();
+    fsPath = path.normalize(fsPath);
+    if (isWin32) {
+      fsPath = fsPath.toLowerCase();
+    }
+
+    return fsPath;
   }
 
   return undefined;
