@@ -41,7 +41,7 @@ export async function selectParametersFile(actionContext: IActionContext, source
     // asdf new?
     // find most likely matches
     let items: IAzureQuickPickItem<IPossibleParamsFile>[] = possibilities.map(paramFile => <IAzureQuickPickItem<IPossibleParamsFile>>{
-      label: `${paramFile === current ? "$(check)" : "$(json)"} ${path.basename(paramFile.path)}`,  // asdf $(star-full)?
+      label: `$(json) ${path.basename(paramFile.path)}`,
       data: paramFile,
       description: paramFile === current ? "(Current)" :
         paramFile.isCloseNameMatch ? "(Similar filename)" : undefined
