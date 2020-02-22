@@ -85,6 +85,9 @@ export async function selectParametersFile(actionContext: IActionContext, source
       });
 
     // tslint:disable-next-line: no-non-null-assertion
+    let paramsFilesSetting = workspace.getConfiguration(configPrefix, templateUri).inspect(configKeys.parametersFiles);
+
+
     await ext.ui.showWarningMessage(String(result.data));
   }
 }
@@ -93,8 +96,8 @@ export async function selectParametersFile(actionContext: IActionContext, source
  * Given a template file URI, find the parameters file, if any, that the user currently has mapped to it
  */
 export function findMappedParamsFileForTemplate(templateFileUri: Uri): Uri | undefined {
-  const paramsFiles: { [key: string]: string } | undefined = workspace.getConfiguration(configPrefix, templateFileUri)
-    .get<{ [key: string]: string }>(configKeys.parametersFiles);
+  const paramsFiles: { [key: string]: string } | undefined =
+    workspace.getConfiguration(configPrefix, templateFileUri).get<{ [key: string]: string }>(configKeys.parametersFiles);
   if (typeof paramsFiles === "object") {
     const normalizedTemplatePath = normalizePath(templateFileUri.fsPath);
     for (let fileNameKey of Object.getOwnPropertyNames(paramsFiles)) {
