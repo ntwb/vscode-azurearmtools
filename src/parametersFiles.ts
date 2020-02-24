@@ -91,6 +91,9 @@ export async function selectParametersFile(actionContext: IActionContext, source
   const paramsFilePath: string | undefined = result.data?.path;
   if (paramsFilePath) {
     await setMappedParamsFileForTemplate(templateUri, paramsFilePath);
+  } else if (result === none) {
+    // Remove the mapping for this file
+    await setMappedParamsFileForTemplate(templateUri, undefined);
   }
 }
 
