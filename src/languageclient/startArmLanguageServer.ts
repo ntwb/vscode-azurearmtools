@@ -325,15 +325,15 @@ function convertToAbsolutePaths(settings: Settings, folder: WorkspaceFolder): vo
     // }
 }
 
-function convertAbsolute(file: string, folder: WorkspaceFolder): string {
-    if (path.isAbsolute(file)) {
-        return file;
-    }
+// function convertAbsolute(file: string, folder: WorkspaceFolder): string {
+//     if (path.isAbsolute(file)) {
+//         return file;
+//     }
 
-    let folderPath: string = folder.uri.fsPath;
-    if (!folderPath) {
-        return file;
-    }
+//     let folderPath: string = folder.uri.fsPath;
+//     if (!folderPath) {
+//         return file;
+//     }
 
-    return path.join(folderPath, file);
-}
+//     return path.join(folderPath, file);
+// }
