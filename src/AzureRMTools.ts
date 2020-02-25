@@ -22,7 +22,7 @@ import * as Json from "./JSON";
 import * as language from "./Language";
 import { reloadSchemas } from "./languageclient/reloadSchemas";
 import { startArmLanguageServer, stopArmLanguageServer } from "./languageclient/startArmLanguageServer";
-import { findMappedParamsFileForTemplate, queryAddParametersFile, selectParametersFile } from "./parametersFiles";
+import { findMappedParamsFileForTemplate, getFriendlyPathToParamsFile, queryAddParametersFile, selectParametersFile } from "./parametersFiles";
 import { IReferenceSite, PositionContext } from "./PositionContext";
 import { ReferenceList } from "./ReferenceList";
 import { getPreferredSchema } from "./schemas";
@@ -99,10 +99,10 @@ export class AzureRMTools {
         this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
         ext.context.subscriptions.push(this._statusBarItem);
 
-        //asdf push to subsscriptions
         vscode.window.onDidChangeActiveTextEditor(this.onActiveTextEditorChanged, this, context.subscriptions);
         vscode.workspace.onDidOpenTextDocument(this.onDocumentOpened, this, context.subscriptions);
         vscode.workspace.onDidChangeTextDocument(this.onDocumentChanged, this, context.subscriptions);
+        vscode.workspace.onDidChangeConfiguration(this.updateParamsFileInStatusBar, this, context.subscriptions);
 
         this._diagnosticsCollection = vscode.languages.createDiagnosticCollection("azurerm-tools-expressions");
         context.subscriptions.push(this._diagnosticsCollection);
@@ -374,7 +374,7 @@ export class AzureRMTools {
         }
     }
 
-    private async  replaceSchema(uri: vscode.Uri, deploymentTemplate: DeploymentTemplate, previousSchema: string, newSchema: string): Promise<void> {
+    private async replaceSchema(uri: vscode.Uri, deploymentTemplate: DeploymentTemplate, previousSchema: string, newSchema: string): Promise<void> {
         // Editor might have been closed or tabbed away from, so make sure it's visible
         const editor = await vscode.window.showTextDocument(uri);
 
@@ -481,7 +481,7 @@ export class AzureRMTools {
                 // asdf consider storing paramsFile with deploymenttemplate
                 // asdf update when settings change
                 const paramsFileUri = findMappedParamsFileForTemplate(activeDocument.uri); // asdf can this throw e.g. invalid path?
-                this._statusBarItem.text = !!paramsFileUri ? `Parameters: ${path.basename(paramsFileUri.fsPath)}` : "Select Parameters File";
+                this._statusBarItem.text = !!paramsFileUri ? `Parameters: ${getFriendlyPathToParamsFile(activeDocument.uri, paramsFileUri)}` : "Select Parameters File...";
                 this._statusBarItem.command = "azurerm-vscode-tools.selectParametersFile";
                 this._statusBarItem.show();
                 return;

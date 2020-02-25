@@ -118,7 +118,6 @@
                     "default": true
                 },
                 "azureResourceManagerTools.parametersFiles": {
-                    "asdf": "parameterFiles?",
                     "type": "object",
                     "description": "asdf todo",
                     "default": {},
