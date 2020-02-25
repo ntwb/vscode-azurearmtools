@@ -16,8 +16,9 @@ import { ext } from './extensionVariables';
 import { containsParamsSchema } from './schemas';
 
 const readAtMostBytesToFindParamsSchema = 4 * 1024;
-const currentMessage = "(Current)";
-const similarFilenameMessage = "(Similar filename)";
+const currentMessage = "Current";
+const similarFilenameMessage = "Filename matches";
+const howToMessage = `You can manually associate a parameter file with this template at any time by clicking "Select Parameter File..." in the status bar or the editor context menu.`;
 
 const _filesToIgnoreThisSession: Set<string> = new Set<string>();
 
@@ -41,75 +42,73 @@ export async function selectParameterFile(actionContext: IActionContext, sourceU
   //     treatAsDeploymentTemplate = true;
   // }
 
-  const currentParamFile: Uri | undefined = findMappedParamFileForTemplate(templateUri);
-  const currentParamFileNormalized: string | undefined = normalizePath(currentParamFile);
+  // Find likely parameter file matches
+  let suggestions: IPossibleParamFile[] = await findSuggestedParameterFiles(templateUri);
 
-  let possibilities: IPossibleParamFile[] = await findSuggestedParameterFiles(templateUri);
-  let current: IPossibleParamFile | undefined = possibilities.find(pf => normalizePath(pf.uri) === currentParamFileNormalized);
-
-  if (currentParamFile && !current) {
+  // Find the current in that list
+  const currentParamUri: Uri | undefined = findMappedParamFileForTemplate(templateUri);
+  const currentParamPathNormalized: string | undefined = currentParamUri ? normalizePath(currentParamUri) : undefined;
+  let currentParamFile: IPossibleParamFile | undefined = suggestions.find(pf => normalizePath(pf.uri) === currentParamPathNormalized);
+  if (currentParamUri && !currentParamFile) {
     // There is a current parameter file, but it wasn't among the list we came up with.  We must add it to the list.
-    current = { isCloseNameMatch: false, uri: currentParamFile, friendlyPath: getFriendlyPathToParamFile(templateUri, currentParamFile) };
-    possibilities = possibilities.concat(current);
+    currentParamFile = { isCloseNameMatch: false, uri: currentParamUri, friendlyPath: getFriendlyPathToParamFile(templateUri, currentParamUri) };
+    suggestions = suggestions.concat(currentParamFile);
   }
 
+  // Create initial pick list and sort it
+  let pickItems: IAzureQuickPickItem<IPossibleParamFile | undefined>[] = suggestions.map(paramFile => createQuickPickItem(paramFile, currentParamFile, templateUri));
+  pickItems.sort((a, b) => {
+    const aData = a?.data;
+    const bData = a?.data;
+
+    // Close name matches go first
+    if (a?.data?.isCloseNameMatch !== b?.data?.isCloseNameMatch) {
+      return a?.data?.isCloseNameMatch ? -1 : 1;
+    }
+
+    // Otherwise compare filenames
+    // tslint:disable-next-line: strict-boolean-expressions
+    return (aData?.uri.fsPath || "").localeCompare(bData?.uri.fsPath || "");
+  });
+
+  // Add None at top, Browse at bottom
   const none: IAzureQuickPickItem<IPossibleParamFile | undefined> = {
     label: "$(circle-slash) None",
-    description: !!currentParamFile ? undefined : currentMessage,
+    description: !!currentParamUri ? undefined : currentMessage,
     data: undefined
   };
   const browse: IAzureQuickPickItem<IPossibleParamFile | undefined> = {
     label: '$(file-directory) Browse...',
     data: undefined
   };
+  pickItems = [none].concat(pickItems).concat([browse]);
 
-  // find most likely matches
-  let items: IAzureQuickPickItem<IPossibleParamFile>[] = possibilities.map(paramFile => createQuickPickItem(paramFile, current, templateUri));
-
-  let allItems = [none].concat(items).concat([browse]);
-
-  // asdf easier method than sorting
-  allItems.sort((a, b) => {
-    const aData = a?.data;
-    const bData = a?.data;
-
-    // The current selected params file goes first
-    if (aData === current) {
-      return -1;
-    } else if (bData === current) {
-      return 1;
-    }
-
-    // "(None)" goes second
-    if (a === none) {
-      return -1;
-    } else if (b === none) {
-      return 1;
-    }
-
-    // Close name matches go next
-    if (a?.data?.isCloseNameMatch !== b?.data?.isCloseNameMatch) {
-      return a?.data?.isCloseNameMatch ? -1 : 1;
-    }
-
-    // tslint:disable-next-line: strict-boolean-expressions
-    return (aData?.uri.fsPath || "").localeCompare(bData?.uri.fsPath || "");
-  });
+  //asdf
+  // // Move the current item (if any) to the very top
+  // const currentItem = pickItems.find(pi => pi.data === currentParamFile);
+  // if (currentItem) {
+  //   pickItems = [currentItem].concat(pickItems.filter(ppf => ppf !== currentItem));
+  // }
 
   // Show the quick pick
   const result: IAzureQuickPickItem<IPossibleParamFile | undefined> = await ext.ui.showQuickPick(
-    allItems,
+    pickItems,
     {
       canPickMany: false,
-      placeHolder: `Select a parameter file to associate with ${path.basename(templateUri.fsPath)}`,
+      placeHolder: `Select a parameter file to associate with "${path.basename(templateUri.fsPath)}"`,
       suppressPersistence: true
     });
 
-  if (result === none) {  // Remove the mapping for this file
+  // Interpret result
+  if (result === none) {
+    // None
+
+    // Remove the mapping for this file
+    await neverAskAgain(templateUri, actionContext);
     await setMappedParamFileForTemplate(templateUri, undefined);
-    // tslint:disable-next-line: no-non-null-assertion
-    _filesToIgnoreThisSession.add(normalizePath(templateUri)!);
   } else if (result === browse) {
+    // Browse...
+
     const paramsPaths: Uri[] | undefined = await window.showOpenDialog({
       canSelectMany: false,
       defaultUri: templateUri,
@@ -132,12 +131,20 @@ export async function selectParameterFile(actionContext: IActionContext, sourceU
       }
     }
 
+    await neverAskAgain(templateUri, actionContext);
+
     // Map to the browsed file
     await setMappedParamFileForTemplate(templateUri, selectedParamsPath);
-  } else if (result.data === current) {
+  } else if (result.data === currentParamFile) {
+    // Current re-selected
+
     // Nothing to change
+    dontAskAgainThisSession(templateUri, actionContext);
   } else {
+    // Item in the list selected
+
     assert(result.data, "Quick pick item should have had data");
+    await neverAskAgain(templateUri, actionContext);
     await setMappedParamFileForTemplate(templateUri, result.data?.uri);
   }
 }
@@ -156,7 +163,6 @@ export function getFriendlyPathToParamFile(templateUri: Uri, paramFileUri: Uri):
 }
 
 function createQuickPickItem(paramFile: IPossibleParamFile, current: IPossibleParamFile | undefined, templateUri: Uri): IAzureQuickPickItem<IPossibleParamFile> {
-  // tslint:disable-next-line: no-non-null-assertion // normalizePath returns truthy if input is truthy
   return {
     label: `$(json) ${paramFile.friendlyPath}`,
     data: paramFile,
@@ -166,19 +172,15 @@ function createQuickPickItem(paramFile: IPossibleParamFile, current: IPossiblePa
   };
 }
 
-function normalizePath(filePath: Uri | string | undefined): string | undefined {
-  const fsPath: string | undefined = typeof filePath === 'string' ? filePath :
-    filePath ? filePath.fsPath : undefined;
-  if (fsPath) {
-    let normalizedPath = path.normalize(fsPath);
-    if (isWin32) {
-      normalizedPath = normalizedPath.toLowerCase();
-    }
-
-    return normalizedPath;
+function normalizePath(filePath: Uri | string): string {
+  const fsPath: string = typeof filePath === 'string' ? filePath :
+    filePath.fsPath;
+  let normalizedPath = path.normalize(fsPath);
+  if (isWin32) {
+    normalizedPath = normalizedPath.toLowerCase();
   }
 
-  return undefined;
+  return normalizedPath;
 }
 
 /**
@@ -278,38 +280,24 @@ export function considerQueryingForParameterFile(document: TextDocument): void {
     return;
   }
 
-  // Ignore this file?
-  const templatUri = document.uri;
-  const templatPath = templatUri.fsPath;
-  // tslint:disable-next-line: no-non-null-assertion
-  let queriedToAddParamFile = _filesToIgnoreThisSession.has(normalizePath(templatPath)!);
-  if (queriedToAddParamFile) {
-    return;
-  }
-  // tslint:disable-next-line: no-non-null-assertion
-  _filesToIgnoreThisSession.add(normalizePath(templatPath)!);
-
+  const templateUri = document.uri;
+  const templatPath = templateUri.fsPath;
   const alreadyHasParamFile: boolean = !!findMappedParamFileForTemplate(document.uri);
-  const checkForMatchingParamFilesSetting: boolean = !!workspace.getConfiguration(configPrefix).get<boolean>(configKeys.checkForMatchingParamFiles);
 
   // tslint:disable-next-line: no-floating-promises Don't wait
   callWithTelemetryAndErrorHandling('queryAddParameterFile', async (actionContext: IActionContext): Promise<void> => {
-    actionContext.telemetry.properties.checkForMatchingParamFiles = String(checkForMatchingParamFilesSetting);
     actionContext.telemetry.properties.alreadyHasParamFile = String(alreadyHasParamFile);
 
-    if (!checkForMatchingParamFilesSetting || alreadyHasParamFile) {
+    if (alreadyHasParamFile) {
       return;
     }
 
-    // tslint:disable-next-line: strict-boolean-expressions
-    const dontAskFiles = ext.context.globalState.get<string[]>(globalStateKeys.dontAskAboutParamFiles) || []; //asdf?
-    if (dontAskFiles.includes(templatPath)) {
-      actionContext.telemetry.properties.isInDontAskList = 'true';
+    if (!canAsk(templateUri, actionContext)) {
       return;
     }
 
-    const possibleParamFiles = await findSuggestedParameterFiles(document.uri);
-    const closeMatches = possibleParamFiles.filter(pf => pf.isCloseNameMatch);
+    const suggestions = await findSuggestedParameterFiles(document.uri);
+    const closeMatches = suggestions.filter(pf => pf.isCloseNameMatch);
     actionContext.telemetry.measurements.closeMatches = closeMatches.length;
     // Take the shortest as the most likely best match
     const closestMatch: IPossibleParamFile | undefined = closeMatches.length > 0 ? closeMatches.sort(pf => -pf.uri.fsPath.length)[0] : undefined;
@@ -321,7 +309,6 @@ export function considerQueryingForParameterFile(document: TextDocument): void {
     const yes: MessageItem = { title: "Yes" };
     const no: MessageItem = { title: "No" }; // asdf blacklist?
     const another: MessageItem = { title: "Choose another" };
-    //asdfconst neverForThisFile: vscode.MessageItem = { title: "Never for this template" };
 
     //asdf ask when no template file
     const response = await ext.ui.showWarningMessage(
@@ -337,17 +324,15 @@ export function considerQueryingForParameterFile(document: TextDocument): void {
 
     switch (response.title) {
       case yes.title:
-        await setMappedParamFileForTemplate(templatUri, closestMatch.uri);
+        await setMappedParamFileForTemplate(templateUri, closestMatch.uri);
         break;
       case no.title:
-        // We won't ask again. Let them know how to do it manually
-        // Don't wait for theanswer
-        window.showInformationMessage(
-          `You can manually associate a parameter file with this template at any time by selecting "Select Parameter File..." in the status bar or the editor context menu.`
-          // {
-          //     //learnMoreLink: "asdf"
-          // }
-        );
+        // We won't ask again
+        await neverAskAgain(templateUri, actionContext);
+
+        // Let them know how to do it manually
+        // Don't wait for an answer
+        window.showInformationMessage(howToMessage);
         break;
       case another.title:
         await commands.executeCommand("azurerm-vscode-tools.selectParameterFile");
@@ -358,6 +343,42 @@ export function considerQueryingForParameterFile(document: TextDocument): void {
         break;
     }
   });
+}
+
+function canAsk(templateUri: Uri, actionContext: IActionContext): boolean {
+  const checkForMatchingParamFilesSetting: boolean = !!workspace.getConfiguration(configPrefix).get<boolean>(configKeys.checkForMatchingParamFiles);
+  actionContext.telemetry.properties.checkForMatchingParamFiles = String(checkForMatchingParamFilesSetting);
+  if (!checkForMatchingParamFilesSetting) {
+    return false;
+  }
+
+  // tslint:disable-next-line: strict-boolean-expressions
+  const neverAskFiles: string[] = ext.context.globalState.get<string[]>(globalStateKeys.dontAskAboutParamFiles) || [];
+  const key = normalizePath(templateUri);
+  if (neverAskFiles.includes(key)) {
+    actionContext.telemetry.properties.isInDontAskList = 'true';
+    return false;
+  }
+
+  let ignoreThisSession = _filesToIgnoreThisSession.has(normalizePath(templateUri));
+  if (ignoreThisSession) {
+    actionContext.telemetry.properties.ignoreThisSession = 'true';
+    return false;
+  }
+
+  return true;
+}
+
+function dontAskAgainThisSession(templateUri: Uri, actionContext: IActionContext): void {
+  _filesToIgnoreThisSession.add(normalizePath(templateUri));
+}
+
+async function neverAskAgain(templateUri: Uri, actionContext: IActionContext): Promise<void> {
+  // tslint:disable-next-line: strict-boolean-expressions
+  const neverAskFiles: string[] = ext.context.globalState.get<string[]>(globalStateKeys.dontAskAboutParamFiles) || [];
+  const key: string = normalizePath(templateUri);
+  neverAskFiles.push(key);
+  await ext.context.globalState.update(globalStateKeys.dontAskAboutParamFiles, neverAskFiles);
 }
 
 /**

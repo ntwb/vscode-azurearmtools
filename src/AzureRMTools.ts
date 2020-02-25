@@ -62,7 +62,7 @@ export function deactivateInternal(): void {
 export class AzureRMTools {
     private readonly _diagnosticsCollection: vscode.DiagnosticCollection;
     private readonly _deploymentTemplates: Map<string, DeploymentTemplate> = new Map<string, DeploymentTemplate>();
-    private readonly _filesAskedToUpdateSchema: Set<string> = new Set<string>();
+    private readonly _filesAskedToUpdateSchemaThisSession: Set<string> = new Set<string>();
     private readonly _paramsStatusBarItem: vscode.StatusBarItem;
     private _areDeploymentTemplateEventsHookedUp: boolean = false;
     private _diagnosticsVersion: number = 0;
@@ -185,6 +185,8 @@ export class AzureRMTools {
                         // No guarantee that active editor is the one we're processing, ignore if not
                         if (editor && editor.document === document) {
                             // Are they using an older schema?  Ask to update.
+                            // tslint:disable-next-line: no-suspicious-comment
+                            // TODO: Move to separate file
                             this.considerQueryNewerSchema(editor, deploymentTemplate);
 
                             // Is there a possibly-matching params file they might want to associate?
@@ -209,6 +211,7 @@ export class AzureRMTools {
                 this.closeDeploymentTemplate(document);
             }
 
+            // tslint:disable-next-line: no-floating-promises
             this.updateParamFileInStatusBar();
         });
     }
@@ -310,12 +313,12 @@ export class AzureRMTools {
         // Only ask to upgrade once per session per file
         const document = editor.document;
         const documentPath = document.uri.fsPath;
-        let queriedToUpdateSchema = this._filesAskedToUpdateSchema.has(documentPath);
+        let queriedToUpdateSchema = this._filesAskedToUpdateSchemaThisSession.has(documentPath);
         if (queriedToUpdateSchema) {
             return;
         }
 
-        this._filesAskedToUpdateSchema.add(documentPath);
+        this._filesAskedToUpdateSchemaThisSession.add(documentPath);
 
         const schemaValue: Json.StringValue | undefined = deploymentTemplate.schemaValue;
         // tslint:disable-next-line: strict-boolean-expressions
@@ -808,6 +811,7 @@ export class AzureRMTools {
                 }
             }
 
+            // tslint:disable-next-line: no-floating-promises
             this.updateParamFileInStatusBar();
         });
     }

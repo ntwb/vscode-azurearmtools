@@ -7,9 +7,9 @@ import * as fse from 'fs-extra';
 import { Settings } from 'http2';
 import * as os from 'os';
 import * as path from 'path';
-import { Hover, MarkdownString, Position, ProgressLocation, TextDocument, window, workspace, WorkspaceFolder } from 'vscode';
+import { ProgressLocation, window, workspace, WorkspaceFolder } from 'vscode';
 import { callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, IActionContext, parseError } from 'vscode-azureextensionui';
-import { CancellationToken, ConfigurationParams, ConfigurationRequest, LanguageClient, LanguageClientOptions, ProvideHoverSignature, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
+import { CancellationToken, ConfigurationParams, ConfigurationRequest, LanguageClient, LanguageClientOptions, RevealOutputChannelOn, ServerOptions } from 'vscode-languageclient';
 import { dotnetAcquire, ensureDotnetDependencies } from '../acquisition/dotnetAcquisition';
 import { configKeys, configPrefix, dotnetVersion, languageFriendlyName, languageId, languageServerFolderName, languageServerName } from '../constants';
 import { ext } from '../extensionVariables';
@@ -123,17 +123,6 @@ export async function startLanguageClient(serverDllPath: string, dotnetExePath: 
                 configurationSection: configPrefix
             },
             middleware: {
-                provideHover: async (document: TextDocument, position: Position, token: CancellationToken, next: ProvideHoverSignature): Promise<Hover | undefined | null> => {
-                    document = document;
-                    position = position;
-                    token = token;
-                    next = next;
-                    let a = await next(document, position, token);
-                    if (a) {
-                        a.contents.push(new MarkdownString("hi there "));
-                        return a;
-                    }
-                },
                 workspace: {
                     configuration: (params: ConfigurationParams, token: CancellationToken, next: ConfigurationRequest.HandlerSignature): unknown[] => {
                         let result: unknown[] = <unknown[]>next(params, token);
