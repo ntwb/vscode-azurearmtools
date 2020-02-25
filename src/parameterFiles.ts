@@ -31,9 +31,15 @@ interface IPossibleParamFile {
 export async function selectParameterFile(actionContext: IActionContext, sourceUri?: Uri): Promise<void> {
   const templateUri = window.activeTextEditor?.document.uri;
   if (!templateUri) {
-    await ext.ui.showWarningMessage(`No template file is selected.`);
+    await ext.ui.showWarningMessage(`No Azure Resource Manager template file is being edited.`);
     return;
   }
+
+  // Verify it's a template file asdf
+  // const deploymentTemplate: DeploymentTemplate = new DeploymentTemplate(, documentPath);
+  // if (deploymentTemplate.hasArmSchemaUri()) {
+  //     treatAsDeploymentTemplate = true;
+  // }
 
   const currentParamFile: Uri | undefined = findMappedParamFileForTemplate(templateUri);
   const currentParamFileNormalized: string | undefined = normalizePath(currentParamFile);
@@ -42,7 +48,7 @@ export async function selectParameterFile(actionContext: IActionContext, sourceU
   let current: IPossibleParamFile | undefined = possibilities.find(pf => normalizePath(pf.uri) === currentParamFileNormalized);
 
   if (currentParamFile && !current) {
-    // There is a current parameters file, but it wasn't among the list we came up with.  We must add it to the list.
+    // There is a current parameter file, but it wasn't among the list we came up with.  We must add it to the list.
     current = { isCloseNameMatch: false, uri: currentParamFile, friendlyPath: getFriendlyPathToParamFile(templateUri, currentParamFile) };
     possibilities = possibilities.concat(current);
   }
@@ -57,8 +63,6 @@ export async function selectParameterFile(actionContext: IActionContext, sourceU
     data: undefined
   };
 
-  // asdf browse  $(search)
-  // asdf new?
   // find most likely matches
   let items: IAzureQuickPickItem<IPossibleParamFile>[] = possibilities.map(paramFile => createQuickPickItem(paramFile, current, templateUri));
 
@@ -97,7 +101,7 @@ export async function selectParameterFile(actionContext: IActionContext, sourceU
     allItems,
     {
       canPickMany: false,
-      placeHolder: `Select a parameters file to associate with template file ${templateUri.fsPath}`, // asdf relative
+      placeHolder: `Select a parameter file to associate with ${path.basename(templateUri.fsPath)}`,
       suppressPersistence: true
     });
 
@@ -109,7 +113,7 @@ export async function selectParameterFile(actionContext: IActionContext, sourceU
     const paramsPaths: Uri[] | undefined = await window.showOpenDialog({
       canSelectMany: false,
       defaultUri: templateUri,
-      openLabel: "Select Parameters File"
+      openLabel: "Select Parameter File"
     });
     if (!paramsPaths || paramsPaths.length !== 1) {
       throw new UserCancelledError();
@@ -118,7 +122,7 @@ export async function selectParameterFile(actionContext: IActionContext, sourceU
 
     if (!await isParameterFile(selectedParamsPath.fsPath)) {
       const selectAnywayResult = await ext.ui.showWarningMessage(
-        `"${selectedParamsPath.fsPath}" does not appear to be a valid parameters file. Select it anyway?`,
+        `"${selectedParamsPath.fsPath}" does not appear to be a valid parameter file. Select it anyway?`,
         { modal: true },
         DialogResponses.yes,
         DialogResponses.no
@@ -178,7 +182,7 @@ function normalizePath(filePath: Uri | string | undefined): string | undefined {
 }
 
 /**
- * Finds parameters files to suggest for a given template.
+ * Finds parameter files to suggest for a given template.
  */
 export async function findSuggestedParameterFiles(templateUri: Uri): Promise<IPossibleParamFile[]> {
   let paths: IPossibleParamFile[] = [];
@@ -244,7 +248,7 @@ async function doesFileContainString(filePath: string, matches: (fileSubcontents
 }
 
 /**
- * Determines if a file is likely a parameters file for the given template file, based on name.
+ * Determines if a file is likely a parameter file for the given template file, based on name.
  * Common patterns are:
  *   template.json, template.params.json
  *   template.json, template.parameters.json
@@ -321,7 +325,7 @@ export function considerQueryingForParameterFile(document: TextDocument): void {
 
     //asdf ask when no template file
     const response = await ext.ui.showWarningMessage(
-      `Detected a parameters file "${closestMatch.friendlyPath}". Do you want to associate it with the template file "${path.basename(templatPath)}"? Having a template file association enables additional functionality, such as deeper validation.`,
+      `A parameter file "${closestMatch.friendlyPath}" has been detected. Do you want to associate it with template file "${path.basename(templatPath)}"? Having a parameter file association enables additional functionality, such as deeper validation.`,
       {
         learnMoreLink: "https://aka.ms/vscode-azurearmtools-updateschema" //asdf
       },
@@ -357,7 +361,7 @@ export function considerQueryingForParameterFile(document: TextDocument): void {
 }
 
 /**
- * Given a template file, find the parameters file, if any, that the user currently has associated with it
+ * Given a template file, find the parameter file, if any, that the user currently has associated with it
  */
 export function findMappedParamFileForTemplate(templateFileUri: Uri): Uri | undefined {
   const paramFiles: { [key: string]: string } | undefined =

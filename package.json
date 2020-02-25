@@ -153,23 +153,28 @@
             },
             {
                 "category": "Azure Resource Manager Tools",
-                "title": "Select params file asdf",
+                "title": "Select Parameter File...",
                 "command": "azurerm-vscode-tools.selectParameterFile",
-                "enablement": "true"
+                "enablement": "editorLangId==arm-template"
             }
         ],
         "menus": {
             "editor/context": [{
-                "command": "azurerm-vscode-tools.reloadSchemas",
-                "when": "editorLangId==arm-template"
-            }],
+                    "command": "azurerm-vscode-tools.reloadSchemas",
+                    "group": "arm-template"
+                },
+                {
+                    "command": "azurerm-vscode-tools.selectParameterFile",
+                    "group": "arm-template"
+                }
+            ],
             "editor/title": [{
                 "command": "azurerm-vscode-tools.selectParameterFile",
-                "group": "hello"
+                "group": "arm-template"
             }],
             "editor/title/context": [{
                 "command": "azurerm-vscode-tools.selectParameterFile",
-                "group": "hello"
+                "group": "arm-template"
             }]
         }
     },
