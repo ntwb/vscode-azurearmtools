@@ -1,10 +1,7 @@
 // ----------------------------------------------------------------------------
 // Copyright (c) Microsoft Corporation.  All rights reserved.
 // ----------------------------------------------------------------------------
-// asdf no = never again
-// asdf parameter file
-// asdf telemetry
-// asdf relative template file paths?
+// asdf telemetry?
 
 import * as assert from 'assert';
 import * as fse from 'fs-extra';
@@ -302,20 +299,17 @@ export function considerQueryingForParameterFile(document: TextDocument): void {
     // Take the shortest as the most likely best match
     const closestMatch: IPossibleParamFile | undefined = closeMatches.length > 0 ? closeMatches.sort(pf => -pf.uri.fsPath.length)[0] : undefined;
     if (!closestMatch) {
-      // asdf
+      // No likely matches, so don't ask
       return;
     }
 
     const yes: MessageItem = { title: "Yes" };
-    const no: MessageItem = { title: "No" }; // asdf blacklist?
-    const another: MessageItem = { title: "Choose another" };
+    const no: MessageItem = { title: "No" };
+    const another: MessageItem = { title: "Choose File..." };
 
     //asdf ask when no template file
     const response = await ext.ui.showWarningMessage(
       `A parameter file "${closestMatch.friendlyPath}" has been detected. Do you want to associate it with template file "${path.basename(templatPath)}"? Having a parameter file association enables additional functionality, such as deeper validation.`,
-      {
-        learnMoreLink: "https://aka.ms/vscode-azurearmtools-updateschema" //asdf
-      },
       yes,
       no,
       another
