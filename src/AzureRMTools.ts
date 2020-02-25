@@ -6,6 +6,7 @@
 // tslint:disable:promise-function-async max-line-length // Grandfathered in
 
 import * as assert from "assert";
+import * as fse from 'fs-extra';
 import * as path from 'path';
 import * as vscode from "vscode";
 import { AzureUserInput, callWithTelemetryAndErrorHandling, callWithTelemetryAndErrorHandlingSync, createAzExtOutputChannel, createTelemetryReporter, IActionContext, registerCommand, registerUIExtensionVariables, TelemetryProperties } from "vscode-azureextensionui";
@@ -22,7 +23,7 @@ import * as Json from "./JSON";
 import * as language from "./Language";
 import { reloadSchemas } from "./languageclient/reloadSchemas";
 import { startArmLanguageServer, stopArmLanguageServer } from "./languageclient/startArmLanguageServer";
-import { findMappedParamsFileForTemplate, getFriendlyPathToParamsFile, queryAddParametersFile, selectParametersFile } from "./parametersFiles";
+import { considerQueryingForParameterFile, findMappedParamFileForTemplate, getFriendlyPathToParamFile, selectParameterFile } from "./parameterFiles";
 import { IReferenceSite, PositionContext } from "./PositionContext";
 import { ReferenceList } from "./ReferenceList";
 import { getPreferredSchema } from "./schemas";
@@ -62,7 +63,7 @@ export class AzureRMTools {
     private readonly _diagnosticsCollection: vscode.DiagnosticCollection;
     private readonly _deploymentTemplates: Map<string, DeploymentTemplate> = new Map<string, DeploymentTemplate>();
     private readonly _filesAskedToUpdateSchema: Set<string> = new Set<string>();
-    private readonly _statusBarItem: vscode.StatusBarItem;
+    private readonly _paramsStatusBarItem: vscode.StatusBarItem;
     private _areDeploymentTemplateEventsHookedUp: boolean = false;
     private _diagnosticsVersion: number = 0;
 
@@ -94,15 +95,15 @@ export class AzureRMTools {
         registerCommand("azurerm-vscode-tools.reloadSchemas", async () => {
             await reloadSchemas();
         });
-        registerCommand("azurerm-vscode-tools.selectParametersFile", selectParametersFile);
+        registerCommand("azurerm-vscode-tools.selectParameterFile", selectParameterFile);
 
-        this._statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
-        ext.context.subscriptions.push(this._statusBarItem);
+        this._paramsStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+        ext.context.subscriptions.push(this._paramsStatusBarItem);
 
         vscode.window.onDidChangeActiveTextEditor(this.onActiveTextEditorChanged, this, context.subscriptions);
         vscode.workspace.onDidOpenTextDocument(this.onDocumentOpened, this, context.subscriptions);
         vscode.workspace.onDidChangeTextDocument(this.onDocumentChanged, this, context.subscriptions);
-        vscode.workspace.onDidChangeConfiguration(this.updateParamsFileInStatusBar, this, context.subscriptions);
+        vscode.workspace.onDidChangeConfiguration(this.updateParamFileInStatusBar, this, context.subscriptions);
 
         this._diagnosticsCollection = vscode.languages.createDiagnosticCollection("azurerm-tools-expressions");
         context.subscriptions.push(this._diagnosticsCollection);
@@ -184,10 +185,10 @@ export class AzureRMTools {
                         // No guarantee that active editor is the one we're processing, ignore if not
                         if (editor && editor.document === document) {
                             // Are they using an older schema?  Ask to update.
-                            this.queryUseNewerSchema(editor, deploymentTemplate);
+                            this.considerQueryNewerSchema(editor, deploymentTemplate);
 
                             // Is there a possibly-matching params file they might want to associate?
-                            queryAddParametersFile(document, deploymentTemplate);
+                            considerQueryingForParameterFile(document);
                         }
                     }
 
@@ -208,7 +209,7 @@ export class AzureRMTools {
                 this.closeDeploymentTemplate(document);
             }
 
-            this.updateParamsFileInStatusBar();
+            this.updateParamFileInStatusBar();
         });
     }
 
@@ -299,7 +300,7 @@ export class AzureRMTools {
         });
     }
 
-    private queryUseNewerSchema(editor: vscode.TextEditor, deploymentTemplate: DeploymentTemplate): void {
+    private considerQueryNewerSchema(editor: vscode.TextEditor, deploymentTemplate: DeploymentTemplate): void {
         // Only deal with saved files, because we don't have an accurate
         //   URI that we can track for unsaved files, and it's a better user experience.
         if (editor.document.uri.scheme !== 'file') {
@@ -467,28 +468,33 @@ export class AzureRMTools {
         };
         ext.context.subscriptions.push(vscode.languages.registerRenameProvider(armDeploymentDocumentSelector, renameProvider));
 
-        //asdfext.context.subscriptions.push(vscode.languages.registerCodeLensProvider(armDeploymentDocumentSelector, new ParamsFilesCodeLensProvider()));
-
         // tslint:disable-next-line:no-floating-promises // Don't wait
         startArmLanguageServer();
     }
 
-    private updateParamsFileInStatusBar(): void {
+    private async updateParamFileInStatusBar(): Promise<void> {
         const activeDocument = vscode.window.activeTextEditor?.document;
         if (activeDocument) {
             const deploymentTemplate = this.getDeploymentTemplate(activeDocument);
             if (deploymentTemplate) {
-                // asdf consider storing paramsFile with deploymenttemplate
-                // asdf update when settings change
-                const paramsFileUri = findMappedParamsFileForTemplate(activeDocument.uri); // asdf can this throw e.g. invalid path?
-                this._statusBarItem.text = !!paramsFileUri ? `Parameters: ${getFriendlyPathToParamsFile(activeDocument.uri, paramsFileUri)}` : "Select Parameters File...";
-                this._statusBarItem.command = "azurerm-vscode-tools.selectParametersFile";
-                this._statusBarItem.show();
+                const paramFileUri = findMappedParamFileForTemplate(activeDocument.uri); // asdf can this throw e.g. invalid path?
+                if (paramFileUri) {
+                    const doesParamFileExist = await fse.pathExists(paramFileUri?.fsPath);
+                    let text = `Parameters: ${getFriendlyPathToParamFile(activeDocument.uri, paramFileUri)}`;
+                    if (!doesParamFileExist) {
+                        text += " $(error) Not found";
+                    }
+                    this._paramsStatusBarItem.text = text;
+                } else {
+                    this._paramsStatusBarItem.text = "Select Parameter File...";
+                }
+                this._paramsStatusBarItem.command = "azurerm-vscode-tools.selectParameterFile";
+                this._paramsStatusBarItem.show();
                 return;
             }
         }
 
-        this._statusBarItem.hide();
+        this._paramsStatusBarItem.hide();
     }
 
     /**
@@ -802,7 +808,7 @@ export class AzureRMTools {
                 }
             }
 
-            this.updateParamsFileInStatusBar();
+            this.updateParamFileInStatusBar();
         });
     }
 

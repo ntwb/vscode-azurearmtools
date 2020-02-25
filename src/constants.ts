@@ -38,15 +38,15 @@ export namespace configKeys {
     export const waitForDebugger = 'languageServer.waitForDebugger';
     export const langServerPath = 'languageServer.path';
     export const checkForLatestSchema = 'checkForLatestSchema';
-    export const checkForMatchingParamsFiles = 'checkForMatchingParamsFiles';
-    export const parametersFiles = 'parametersFiles';
+    export const checkForMatchingParamFiles = 'checkForMatchingParamFiles';
+    export const parameterFiles = 'parameterFiles';
 }
 
 export namespace globalStateKeys {
     // Set of files to not ask about using the newest schema
     export const dontAskAboutSchemaFiles = 'dontAskAboutSchemaFiles';
     // Set of files to not automatically search for params files for
-    export const dontAskAboutParamsFiles = 'dontAskAboutParamsFiles';
+    export const dontAskAboutParamFiles = 'dontAskAboutParamFiles';
 }
 
 // For testing: We create a diagnostic with this message during testing to indicate when all (expression) diagnostics have been calculated

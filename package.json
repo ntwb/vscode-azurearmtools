@@ -45,7 +45,7 @@
         "onLanguage:jsonc",
         "onCommand:azurerm-vscode-tools.uninstallDotnet",
         "onCommand:azurerm-vscode-tools.reloadSchemas",
-        "onCommand:azurerm-vscode-tools.selectParametersFile"
+        "onCommand:azurerm-vscode-tools.selectParameterFile"
     ],
     "contributes": {
         "grammars": [{
@@ -112,12 +112,12 @@
                     "description": "Check if the schema for deployment templates is using an out-of-date version and suggest updating",
                     "default": true
                 },
-                "azureResourceManagerTools.checkForMatchingParamsFiles": {
+                "azureResourceManagerTools.checkForMatchingParamFiles": {
                     "type": "boolean",
                     "description": "Check if an opened template file has a matching params file and ask to use it",
                     "default": true
                 },
-                "azureResourceManagerTools.parametersFiles": {
+                "azureResourceManagerTools.parameterFiles": {
                     "type": "object",
                     "description": "asdf todo",
                     "default": {},
@@ -154,7 +154,7 @@
             {
                 "category": "Azure Resource Manager Tools",
                 "title": "Select params file asdf",
-                "command": "azurerm-vscode-tools.selectParametersFile",
+                "command": "azurerm-vscode-tools.selectParameterFile",
                 "enablement": "true"
             }
         ],
@@ -164,11 +164,11 @@
                 "when": "editorLangId==arm-template"
             }],
             "editor/title": [{
-                "command": "azurerm-vscode-tools.selectParametersFile",
+                "command": "azurerm-vscode-tools.selectParameterFile",
                 "group": "hello"
             }],
             "editor/title/context": [{
-                "command": "azurerm-vscode-tools.selectParametersFile",
+                "command": "azurerm-vscode-tools.selectParameterFile",
                 "group": "hello"
             }]
         }
