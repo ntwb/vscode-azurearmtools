@@ -9,6 +9,7 @@ import * as path from 'path';
 import { commands, ConfigurationTarget, MessageItem, TextDocument, Uri, window, workspace } from 'vscode';
 import { callWithTelemetryAndErrorHandling, DialogResponses, IActionContext, IAzureQuickPickItem, UserCancelledError } from 'vscode-azureextensionui';
 import { configKeys, configPrefix, globalStateKeys, isWin32 } from './constants';
+import { DeploymentTemplate } from './DeploymentTemplate';
 import { ext } from './extensionVariables';
 import { containsParamsSchema } from './schemas';
 
@@ -26,18 +27,24 @@ interface IPossibleParamFile {
 }
 
 // tslint:disable-next-line: max-func-body-length asdf
-export async function selectParameterFile(actionContext: IActionContext, sourceUri?: Uri): Promise<void> {
-  const templateUri = window.activeTextEditor?.document.uri;
-  if (!templateUri) {
+export async function selectParameterFile(actionContext: IActionContext, sourceUri: Uri | undefined): Promise<void> {
+  if (!sourceUri) {
+    sourceUri = window.activeTextEditor?.document.uri;
+  }
+
+  if (!sourceUri) {
     await ext.ui.showWarningMessage(`No Azure Resource Manager template file is being edited.`);
     return;
   }
 
+  let templateUri: Uri = sourceUri;
+
   // Verify it's a template file asdf
-  // const deploymentTemplate: DeploymentTemplate = new DeploymentTemplate(, documentPath);
-  // if (deploymentTemplate.hasArmSchemaUri()) {
-  //     treatAsDeploymentTemplate = true;
-  // }
+  const contents = (await fse.readFile(templateUri.fsPath, { encoding: "utf8" })).toString();
+  const template: DeploymentTemplate = new DeploymentTemplate(contents, "Check file is template");
+  if (!template.hasArmSchemaUri()) {
+    throw new Error(`"${templateUri.fsPath}" does not appear to be an Azure Resource Manager deployment template file.`);
+  }
 
   // Find likely parameter file matches
   let suggestions: IPossibleParamFile[] = await findSuggestedParameterFiles(templateUri);
@@ -329,7 +336,7 @@ export function considerQueryingForParameterFile(document: TextDocument): void {
         window.showInformationMessage(howToMessage);
         break;
       case another.title:
-        await commands.executeCommand("azurerm-vscode-tools.selectParameterFile");
+        await commands.executeCommand("azurerm-vscode-tools.selectParameterFile", templateUri);
         // asdf what if they cancel?  Do we tell them how?  ask again?
         break;
       default:

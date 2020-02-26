@@ -19,7 +19,8 @@ export const languageServerName = 'ARM Template Language Server';
 export const languageFriendlyName = 'Azure Resource Manager Template';
 export const languageId = 'arm-template';
 export const languageServerFolderName = 'languageServer';
-export const outputWindowName = 'Azure Resource Manager Tools';
+export const extensionName = 'Azure Resource Manager Tools';
+export const outputWindowName = extensionName;;
 
 // String that shows up in our errors as the source in parentheses
 export const expressionsDiagnosticsSource = "arm-template (expressions)";
@@ -47,6 +48,11 @@ export namespace globalStateKeys {
     export const dontAskAboutSchemaFiles = 'dontAskAboutSchemaFiles';
     // Set of files to not automatically search for params files for
     export const dontAskAboutParamFiles = 'dontAskAboutParamFiles';
+
+    export namespace survey {
+        export const neverShowSurvey = 'neverShowSurvey';
+        export const surveyPostponedUntilTime = 'surveyPostponedUntilTime';
+    }
 }
 
 // For testing: We create a diagnostic with this message during testing to indicate when all (expression) diagnostics have been calculated

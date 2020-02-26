@@ -2,7 +2,7 @@
     "name": "azurerm-vscode-tools",
     "displayName": "Azure Resource Manager (ARM) Tools",
     "description": "Language server, editing tools and snippets for Azure Resource Manager (ARM) template files.",
-    "version": "0.8.5-alpha",
+    "version": "0.9.0-alpha",
     "publisher": "msazurermtools",
     "config": {
         "ARM_LANGUAGE_SERVER_NUGET_VERSION": "3.0.0-preview.20107.3"
@@ -45,7 +45,8 @@
         "onLanguage:jsonc",
         "onCommand:azurerm-vscode-tools.uninstallDotnet",
         "onCommand:azurerm-vscode-tools.reloadSchemas",
-        "onCommand:azurerm-vscode-tools.selectParameterFile"
+        "onCommand:azurerm-vscode-tools.selectParameterFile",
+        "onCommand:azurerm-vscode-tools.resetGlobalState"
     ],
     "contributes": {
         "grammars": [{
@@ -156,6 +157,11 @@
                 "title": "Select Parameter File...",
                 "command": "azurerm-vscode-tools.selectParameterFile",
                 "enablement": "editorLangId==arm-template"
+            },
+            {
+                "category": "Azure Resource Manager Tools",
+                "title": "Reset Global State",
+                "command": "azurerm-vscode-tools.resetGlobalState"
             }
         ],
         "menus": {
