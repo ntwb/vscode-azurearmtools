@@ -49,7 +49,8 @@
         "onCommand:azurerm-vscode-tools.resetGlobalState"
     ],
     "contributes": {
-        "grammars": [{
+        "grammars": [
+            {
                 "language": "arm-template",
                 "scopeName": "source.json.arm-template",
                 "path": "dist/grammars/JSONC.arm.tmLanguage.json"
@@ -59,7 +60,8 @@
                 "path": "dist/grammars/arm-expression-string.tmLanguage.json"
             }
         ],
-        "snippets": [{
+        "snippets": [
+            {
                 "language": "arm-template",
                 "path": "./assets/armsnippets.jsonc"
             },
@@ -129,20 +131,25 @@
             }
         },
         "views": {
-            "explorer": [{
-                "id": "azurerm-vscode-tools.template-outline",
-                "name": "ARM Template Outline",
-                "when": "showAzureTemplateView"
-            }]
+            "explorer": [
+                {
+                    "id": "azurerm-vscode-tools.template-outline",
+                    "name": "ARM Template Outline",
+                    "when": "showAzureTemplateView"
+                }
+            ]
         },
-        "languages": [{
-            "id": "arm-template",
-            "aliases": [
-                "Azure Resource Manager Template"
-            ],
-            "configuration": "dist/grammars/jsonc.arm.language-configuration.json"
-        }],
-        "commands": [{
+        "languages": [
+            {
+                "id": "arm-template",
+                "aliases": [
+                    "Azure Resource Manager Template"
+                ],
+                "configuration": "dist/grammars/jsonc.arm.language-configuration.json"
+            }
+        ],
+        "commands": [
+            {
                 "category": "Azure Resource Manager Tools",
                 "title": "Remove Local Dotnet Core Installation",
                 "command": "azurerm-vscode-tools.uninstallDotnet"
@@ -165,7 +172,8 @@
             }
         ],
         "menus": {
-            "editor/context": [{
+            "editor/context": [
+                {
                     "command": "azurerm-vscode-tools.reloadSchemas",
                     "group": "arm-template"
                 },
@@ -174,14 +182,18 @@
                     "group": "arm-template"
                 }
             ],
-            "editor/title": [{
-                "command": "azurerm-vscode-tools.selectParameterFile",
-                "group": "arm-template"
-            }],
-            "editor/title/context": [{
-                "command": "azurerm-vscode-tools.selectParameterFile",
-                "group": "arm-template"
-            }]
+            "editor/title": [
+                {
+                    "command": "azurerm-vscode-tools.selectParameterFile",
+                    "group": "arm-template"
+                }
+            ],
+            "editor/title/context": [
+                {
+                    "command": "azurerm-vscode-tools.selectParameterFile",
+                    "group": "arm-template"
+                }
+            ]
         }
     },
     "main": "main",
